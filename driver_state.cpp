@@ -11,6 +11,10 @@ driver_state::~driver_state()
     delete [] image_depth;
 }
 
+float Area (float ax, float ay, float bx, float by,float cx, float cy) {
+    return 0.5 * ( (bx * cy - cx * by) - (ax * cy - cx * ay) + (ax * by - bx * ay) );
+}
+
 // This function should allocate and initialize the arrays that store color and
 // depth.  This is not done during the constructor since the width and height
 // are not known when this class is constructed.
@@ -94,8 +98,8 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
     float alpha, beta, gamma; // baryocentric weight values, should add to 1
     vec2 A, B, C; // A = {Ax, Ay}, and so on
 
-    for (unsigned i = x_lo; i < x_up; i++) {
-        for (unsigned j = y_lo; j < y_up; j++) {
+    for (int i = x_lo; i < x_up; i++) {
+        for (int j = y_lo; j < y_up; j++) {
             // calculate A, B, and C for baryocentric weights
             Ax = 0.5 * (in[0] -> gl_Position[0] / in[0] -> gl_Position[3] + 1) * state.image_width - 0.5;
             Ay = 0.5 * (in[0] -> gl_Position[1] / in[0] -> gl_Position[3] + 1) * state.image_height - 0.5;
