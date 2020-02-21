@@ -82,5 +82,45 @@ void clip_triangle(driver_state& state, const data_geometry* in[3],int face)
 void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 {
     std::cout<<"TODO: implement rasterization"<<std::endl;
+    
+    int x_lo, x_up, y_lo, y_up; // upper and lower bounds for x and y, currently naive
+
+    x_lo = y_lo = 0; // set x and y lower bounds to 0, lower left corner represented by (0, 0)
+
+    x_up = state.image_width; // set x upper bound to the full image width and y upper bound to the full image height
+    y_up = state.image_height; // upper right corner represented by (width, height)
+
+    float Ax, Ay, Bx, By, Cx, Cy; // used for calculating vertex coordinates for baryocentric weights
+    float alpha, beta, gamma; // baryocentric weight values, should add to 1
+    vec2 A, B, C; // A = {Ax, Ay}, and so on
+
+    for (unsigned i = x_lo; i < x_up; i++) {
+        for (unsigned j = y_lo; j < y_up; j++) {
+            // calculate A, B, and C for baryocentric weights
+            Ax = 0.5 * (in[0] -> gl_Position[0] / in[0] -> gl_Position[3] + 1) * state.image_width - 0.5;
+            Ay = 0.5 * (in[0] -> gl_Position[1] / in[0] -> gl_Position[3] + 1) * state.image_height - 0.5;
+            Bx = 0.5 * (in[1] -> gl_Position[0] / in[1] -> gl_Position[3] + 1) * state.image_width - 0.5;
+            By = 0.5 * (in[1] -> gl_Position[1] / in[1] -> gl_Position[3] + 1) * state.image_height - 0.5;
+            Cx = 0.5 * (in[2] -> gl_Position[0] / in[2] -> gl_Position[3] + 1) * state.image_width - 0.5;
+            Cy = 0.5 * (in[2] -> gl_Position[1] / in[2] -> gl_Position[3] + 1) * state.image_height - 0.5;
+    
+            A = {Ax, Ay};
+            B = {Bx, By};
+            C = {Cx, Cy};
+
+            // calculate alpha, beta, and gamma using area formula
+            // Area = 0.5 * ( (bx * cy - cx * by) - (ax * cy - cx * ay) + (ax * by - bx * ay) )
+            vec2 point = {float(i + 0.5), float(j + 0.5)}; // used for calculating area, reference point
+
+            alpha = Area(point[0], point[1], B[0], B[1], C[0], C[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
+            beta  = Area(A[0], A[1], point[0], point[1], C[0], C[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
+            gamma = Area(A[0], A[1], B[0], B[1], point[0], point[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
+            
+            // checking for whether youre inside the triangle and that the calculations hold true to the properties of barycentric weights
+            if (alpha >= 0 && beta >= 0 && gamma >= 0 && alpha + beta + gamma == 1) { 
+                state.image_color[(j * state.image_width) + i] = make_pixel(255, 255, 255); // if inside the object, color pixel white (for now)
+            }
+        }
+    }
 }
 
