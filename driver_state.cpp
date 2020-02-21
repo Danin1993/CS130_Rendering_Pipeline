@@ -38,6 +38,26 @@ void initialize_render(driver_state& state, int width, int height)
 void render(driver_state& state, render_type type)
 {
     std::cout<<"TODO: implement rendering."<<std::endl;
+    
+    data_geometry data_g[3];
+
+    const data_geometry * data_g_pointer[3] = {&data_g[0], &data_g[1], &data_g[2]};
+    
+    switch(type) {
+        case render_type::triangle:
+            data_vertex data_v;
+            
+            for (int i = 0; i < state.num_vertices * state.floats_per_vertex; i += 3 * state.floats_per_vertex) {
+                for (int j = 0; j < 3; j++) {
+                data_v.data = state.vertex_data + i + j * state.floats_per_vertex;
+                state.vertex_shader(data_v, data_g[j], state.uniform_data); 
+                }
+            }
+
+            clip_triangle(state, data_g_pointer, 0);
+        
+        break;
+    }
 }
 
 
