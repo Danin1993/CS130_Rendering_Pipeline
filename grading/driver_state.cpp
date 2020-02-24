@@ -11,7 +11,7 @@ driver_state::~driver_state()
     delete [] image_depth;
 }
 
-float Area (float ax, float ay, float bx, float by,float cx, float cy) {
+float Area (float ax, float ay, float bx, float by, float cx, float cy) {
     return 0.5 * ( (bx * cy - cx * by) - (ax * cy - cx * ay) + (ax * by - bx * ay) );
 }
 
@@ -54,10 +54,11 @@ void render(driver_state& state, render_type type)
                 for (int j = 0; j < 3; j++) {
                 data_v.data = state.vertex_data + i + j * state.floats_per_vertex;
                 state.vertex_shader(data_v, data_g[j], state.uniform_data); 
+                clip_triangle(state, data_g_pointer, 0); 
                 }
             }
 
-            clip_triangle(state, data_g_pointer, 0);
+            
         
         break;
     }
@@ -113,14 +114,16 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 
             // calculate alpha, beta, and gamma using area formula
             // Area = 0.5 * ( (bx * cy - cx * by) - (ax * cy - cx * ay) + (ax * by - bx * ay) )
-            vec2 point = {float(i + 0.5), float(j + 0.5)}; // used for calculating area, reference point
+            vec2 point = {float(i), float(j)}; // used for calculating area, reference point
+            
+            float Area_ABC = Area(A[0], A[1], B[0], B[1], C[0], C[1]);
 
-            alpha = Area(point[0], point[1], B[0], B[1], C[0], C[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
-            beta  = Area(A[0], A[1], point[0], point[1], C[0], C[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
-            gamma = Area(A[0], A[1], B[0], B[1], point[0], point[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
+            alpha = Area(point[0], point[1], B[0], B[1], C[0], C[1]) / Area_ABC;
+            beta  = Area(A[0], A[1], point[0], point[1], C[0], C[1]) / Area_ABC;
+            gamma = Area(A[0], A[1], B[0], B[1], point[0], point[1]) / Area_ABC; 
             
             // checking for whether youre inside the triangle and that the calculations hold true to the properties of barycentric weights
-            if (alpha >= 0 && beta >= 0 && gamma >= 0 && alpha + beta + gamma == 1) { 
+            if (alpha >= 0 && beta >= 0 && gamma >= 0) { 
                 state.image_color[(j * state.image_width) + i] = make_pixel(255, 255, 255); // if inside the object, color pixel white (for now)
             }
         }
