@@ -20,16 +20,15 @@ float Area (float ax, float ay, float bx, float by,float cx, float cy) {
 // are not known when this class is constructed.
 void initialize_render(driver_state& state, int width, int height)
 {
-    state.image_width=width;
-    state.image_height=height;
-    state.image_color=0;
-    state.image_depth=0;
+    state.image_width = width;
+    state.image_height = height;
+    state.image_color = new pixel[width * height];
+    state.image_depth = new float[width * height];
     // std::cout<<"TODO: allocate and initialize state.image_color and state.image_depth."<<std::endl;
-    for (int i = 0; i < state.image_height; i++) {
-        for (int j = 0; j < state.image_width; j++) {
-            state.image_color[j] = make_pixel(0, 0, 0); // initialize each pixel to black
-        }
-    }
+    
+      for (int j = 0; j < (width * height); j++) {
+          state.image_color[j] = make_pixel(0, 0, 0); // initialize each pixel to black
+      }
 }
 
 // This function will be called to render the data that has been stored in this class.

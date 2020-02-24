@@ -11,21 +11,24 @@ driver_state::~driver_state()
     delete [] image_depth;
 }
 
+float Area (float ax, float ay, float bx, float by,float cx, float cy) {
+    return 0.5 * ( (bx * cy - cx * by) - (ax * cy - cx * ay) + (ax * by - bx * ay) );
+}
+
 // This function should allocate and initialize the arrays that store color and
 // depth.  This is not done during the constructor since the width and height
 // are not known when this class is constructed.
 void initialize_render(driver_state& state, int width, int height)
 {
-    state.image_width=width;
-    state.image_height=height;
-    state.image_color=0;
-    state.image_depth=0;
+    state.image_width = width;
+    state.image_height = height;
+    state.image_color = new pixel[width * height];
+    state.image_depth = new float[width * height];
     // std::cout<<"TODO: allocate and initialize state.image_color and state.image_depth."<<std::endl;
-    for (int i = 0; i < state.image_height; i++) {
-        for (int j = 0; i < state.image_width; i++) {
-            state.image_color[j] = make_pixel(0, 0, 0); // initialize each pixel to black
-        }
-    }
+    
+      for (int j = 0; j < (width * height); j++) {
+          state.image_color[j] = make_pixel(0, 0, 0); // initialize each pixel to black
+      }
 }
 
 // This function will be called to render the data that has been stored in this class.
@@ -38,6 +41,26 @@ void initialize_render(driver_state& state, int width, int height)
 void render(driver_state& state, render_type type)
 {
     std::cout<<"TODO: implement rendering."<<std::endl;
+    
+    data_geometry data_g[3];
+
+    const data_geometry * data_g_pointer[3] = {&data_g[0], &data_g[1], &data_g[2]};
+    
+    switch(type) {
+        case render_type::triangle:
+            data_vertex data_v;
+            
+            for (int i = 0; i < state.num_vertices * state.floats_per_vertex; i += 3 * state.floats_per_vertex) {
+                for (int j = 0; j < 3; j++) {
+                data_v.data = state.vertex_data + i + j * state.floats_per_vertex;
+                state.vertex_shader(data_v, data_g[j], state.uniform_data); 
+                }
+            }
+
+            clip_triangle(state, data_g_pointer, 0);
+        
+        break;
+    }
 }
 
 
@@ -62,5 +85,45 @@ void clip_triangle(driver_state& state, const data_geometry* in[3],int face)
 void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 {
     std::cout<<"TODO: implement rasterization"<<std::endl;
+    
+    int x_lo, x_up, y_lo, y_up; // upper and lower bounds for x and y, currently naive
+
+    x_lo = y_lo = 0; // set x and y lower bounds to 0, lower left corner represented by (0, 0)
+
+    x_up = state.image_width; // set x upper bound to the full image width and y upper bound to the full image height
+    y_up = state.image_height; // upper right corner represented by (width, height)
+
+    float Ax, Ay, Bx, By, Cx, Cy; // used for calculating vertex coordinates for baryocentric weights
+    float alpha, beta, gamma; // baryocentric weight values, should add to 1
+    vec2 A, B, C; // A = {Ax, Ay}, and so on
+
+    for (int i = x_lo; i < x_up; i++) {
+        for (int j = y_lo; j < y_up; j++) {
+            // calculate A, B, and C for baryocentric weights
+            Ax = 0.5 * (in[0] -> gl_Position[0] / in[0] -> gl_Position[3] + 1) * state.image_width - 0.5;
+            Ay = 0.5 * (in[0] -> gl_Position[1] / in[0] -> gl_Position[3] + 1) * state.image_height - 0.5;
+            Bx = 0.5 * (in[1] -> gl_Position[0] / in[1] -> gl_Position[3] + 1) * state.image_width - 0.5;
+            By = 0.5 * (in[1] -> gl_Position[1] / in[1] -> gl_Position[3] + 1) * state.image_height - 0.5;
+            Cx = 0.5 * (in[2] -> gl_Position[0] / in[2] -> gl_Position[3] + 1) * state.image_width - 0.5;
+            Cy = 0.5 * (in[2] -> gl_Position[1] / in[2] -> gl_Position[3] + 1) * state.image_height - 0.5;
+    
+            A = {Ax, Ay};
+            B = {Bx, By};
+            C = {Cx, Cy};
+
+            // calculate alpha, beta, and gamma using area formula
+            // Area = 0.5 * ( (bx * cy - cx * by) - (ax * cy - cx * ay) + (ax * by - bx * ay) )
+            vec2 point = {float(i + 0.5), float(j + 0.5)}; // used for calculating area, reference point
+
+            alpha = Area(point[0], point[1], B[0], B[1], C[0], C[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
+            beta  = Area(A[0], A[1], point[0], point[1], C[0], C[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
+            gamma = Area(A[0], A[1], B[0], B[1], point[0], point[1]) / Area(A[0], A[1], B[0], B[1], C[0], C[1]);
+            
+            // checking for whether youre inside the triangle and that the calculations hold true to the properties of barycentric weights
+            if (alpha >= 0 && beta >= 0 && gamma >= 0 && alpha + beta + gamma == 1) { 
+                state.image_color[(j * state.image_width) + i] = make_pixel(255, 255, 255); // if inside the object, color pixel white (for now)
+            }
+        }
+    }
 }
 
