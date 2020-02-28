@@ -111,21 +111,13 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
     y_lo = std::min(Ay, std::min(By, Cy));
     x_up = std::max(Ax, std::max(Bx, Cx)) + 1;
     y_up = std::max(Ay, std::max(By, Cy)) + 1;
+        
+    A = {Ax, Ay};
+    B = {Bx, By};
+    C = {Cx, Cy};
 
     for (int i = x_lo; i < x_up; i++) {
         for (int j = y_lo; j < y_up; j++) {
-            // calculate A, B, and C for baryocentric weights
-            Ax = 0.5 * (in[0] -> gl_Position[0] / in[0] -> gl_Position[3] + 1) * state.image_width - 0.5;
-            Ay = 0.5 * (in[0] -> gl_Position[1] / in[0] -> gl_Position[3] + 1) * state.image_height - 0.5;
-            Bx = 0.5 * (in[1] -> gl_Position[0] / in[1] -> gl_Position[3] + 1) * state.image_width - 0.5;
-            By = 0.5 * (in[1] -> gl_Position[1] / in[1] -> gl_Position[3] + 1) * state.image_height - 0.5;
-            Cx = 0.5 * (in[2] -> gl_Position[0] / in[2] -> gl_Position[3] + 1) * state.image_width - 0.5;
-            Cy = 0.5 * (in[2] -> gl_Position[1] / in[2] -> gl_Position[3] + 1) * state.image_height - 0.5;
-    
-            A = {Ax, Ay};
-            B = {Bx, By};
-            C = {Cx, Cy};
-
             // calculate alpha, beta, and gamma using area formula
             // Area = 0.5 * ( (bx * cy - cx * by) - (ax * cy - cx * ay) + (ax * by - bx * ay) )
             vec2 point = {float(i), float(j)}; // used for calculating area, reference point
