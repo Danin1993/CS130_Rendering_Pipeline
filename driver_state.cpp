@@ -29,6 +29,7 @@ void initialize_render(driver_state& state, int width, int height)
     
       for (int j = 0; j < (width * height); j++) {
           state.image_color[j] = make_pixel(0, 0, 0); // initialize each pixel to black
+          state.image_depth[j] = 1; // initialize depth to 1
       }
 }
 
@@ -53,10 +54,11 @@ void render(driver_state& state, render_type type)
             
             for (int i = 0; i < state.num_vertices * state.floats_per_vertex; i += 3 * state.floats_per_vertex) {
                 for (int j = 0; j < 3; j++) {
-                data_v.data = state.vertex_data + i + j * state.floats_per_vertex;
-                state.vertex_shader(data_v, data_g[j], state.uniform_data); 
-                clip_triangle(state, data_g_pointer, 0); 
+                  data_g[j].data = state.vertex_data + i + j * state.floats_per_vertex;
+                  data_v.data = state.vertex_data + i + j * state.floats_per_vertex;
+                  state.vertex_shader(data_v, data_g[j], state.uniform_data); 
                 }
+                clip_triangle(state, data_g_pointer, 0); 
             }
 
             
@@ -77,7 +79,7 @@ void clip_triangle(driver_state& state, const data_geometry* in[3],int face)
         rasterize_triangle(state, in);
         return;
     }
-    std::cout<<"TODO: implement clipping. (The current code passes the triangle through without clipping them.)"<<std::endl;
+    // std::cout<<"TODO: implement clipping. (The current code passes the triangle through without clipping them.)"<<std::endl;
     clip_triangle(state,in,face+1);
 }
 
@@ -97,6 +99,9 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 
     float Ax, Ay, Bx, By, Cx, Cy; // used for calculating vertex coordinates for baryocentric weights
     float alpha, beta, gamma; // baryocentric weight values, should add to 1
+    float depth;
+    data_fragment data_f;
+    data_output data_o;
     vec2 A, B, C; // A = {Ax, Ay}, and so on
     
     // implement bounding box
@@ -128,9 +133,35 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
             beta  = Area(A[0], A[1], point[0], point[1], C[0], C[1]) / Area_ABC;
             gamma = Area(A[0], A[1], B[0], B[1], point[0], point[1]) / Area_ABC; 
             
+            depth = ((alpha * (in[0] -> gl_Position[2] / in[0] -> gl_Position[3])) 
+                   + (beta  * (in[1] -> gl_Position[2] / in[1] -> gl_Position[3])) 
+                   + (gamma * (in[2] -> gl_Position[2] / in[2] -> gl_Position[3])));
+            
+            data_f.data = new float[state.floats_per_vertex];
+            
+            for (int k = 0; k < state.floats_per_vertex; k++) {
+              if (state.interp_rules[k] == interp_type::flat) {
+                data_f.data[k] = in[0] -> data[k];
+              }
+            
+              else if (state.interp_rules[k] == interp_type::noperspective) {
+                data_f.data[k] = ((alpha * in[0] -> data[k]) + (beta * in[1] -> data[k]) + (gamma * in[2] -> data[k]));
+              }
+            
+              else if (state.interp_rules[k] == interp_type::smooth) {
+                float delta = (alpha / in[0] -> gl_Position[3]) + (beta / in[1] -> gl_Position[3]) + (gamma / in[2] -> gl_Position[3]);
+                
+                data_f.data[k] = (alpha / in[0] -> gl_Position[3] / delta * in[0] -> gl_Position[3]) 
+                               + (beta / in[1] -> gl_Position[3] / delta * in[1] -> gl_Position[3]) 
+                               + (gamma / in[2] -> gl_Position[3] / delta * in[2] -> gl_Position[3]);
+              }
+            }
+            
             // checking for whether youre inside the triangle and that the calculations hold true to the properties of barycentric weights
             if (alpha >= 0 && beta >= 0 && gamma >= 0) { 
-                state.image_color[(j * state.image_width) + i] = make_pixel(255, 255, 255); // if inside the object, color pixel white (for now)
+                state.fragment_shader(data_f, data_o, state.uniform_data);
+                state.image_color[(j * state.image_width) + i] = make_pixel(255 * data_o.output_color[0], 255 * data_o.output_color[1], 255 * data_o.output_color[2]);
+                state.image_depth[(j * state.image_width) + i] = depth;
             }
         }
     }
