@@ -42,15 +42,17 @@ void initialize_render(driver_state& state, int width, int height)
 //   render_type::strip -    The vertices are to be interpreted as a triangle strip.
 void render(driver_state& state, render_type type)
 {
-    std::cout<<"TODO: implement rendering."<<std::endl;
+    // std::cout<<"TODO: implement rendering."<<std::endl;
     
     data_geometry data_g[3];
+    data_vertex data_v;
+    data_vertex data_v_array[3];
+    int indx = 0;
 
     const data_geometry * data_g_pointer[3] = {&data_g[0], &data_g[1], &data_g[2]};
     
     switch(type) {
         case render_type::triangle:
-            data_vertex data_v;
             
             for (int i = 0; i < state.num_vertices * state.floats_per_vertex; i += 3 * state.floats_per_vertex) {
                 for (int j = 0; j < 3; j++) {
@@ -61,8 +63,54 @@ void render(driver_state& state, render_type type)
                 clip_triangle(state, data_g_pointer, 0); 
             }
 
-            
-        
+        break;
+
+        case render_type::indexed:
+            for (int i = 0; i < 3 * state.num_triangles; i += 3) {
+                for (int j = 0; j < 3; j++) {
+                    indx = state.index_data[i + j];
+                    data_v_array[j].data = state.vertex_data + (indx * state.floats_per_vertex);
+                    data_g[j].data = state.vertex_data + (indx * state.floats_per_vertex);
+                    state.vertex_shader(data_v_array[j], data_g[j], state.uniform_data); 
+                }
+                clip_triangle(state, data_g_pointer, 0);
+            }
+
+        break;
+
+        case render_type::fan:
+
+            for (int i = 0; i < 3 * state.num_vertices; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (j != 0) {
+                        data_v_array[j].data = state.vertex_data + (j * state.floats_per_vertex) + (i * state.floats_per_vertex);
+                        data_g[j].data = state.vertex_data + (j * state.floats_per_vertex) + (i * state.floats_per_vertex);
+                    } else {
+                        data_v_array[j].data = state.vertex_data;
+                        data_g[j].data = state.vertex_data;
+                    }
+                    state.vertex_shader(data_v_array[j], data_g[j], state.uniform_data);
+                }
+                clip_triangle(state, data_g_pointer, 0);
+            }
+
+        break;
+
+        case render_type::strip:
+
+            for (int i = 0; i < state.num_vertices - 2; i++) {
+                if (indx != 0) { // if we do this when indx is 0, we get an out of range error
+                    indx -= (2 * state.floats_per_vertex);
+                }
+                for (int j = 0; j < 3; j++) {
+                    data_v_array[j].data = state.vertex_data + indx;
+                    data_g[j].data = state.vertex_data + indx;
+                    indx += state.floats_per_vertex;
+                    state.vertex_shader(data_v_array[j], data_g[j], state.uniform_data); 
+                }
+                clip_triangle(state, data_g_pointer, 0);
+            }
+
         break;
     }
 }
@@ -88,7 +136,7 @@ void clip_triangle(driver_state& state, const data_geometry* in[3],int face)
 // fragments, calling the fragment shader, and z-buffering.
 void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 {
-    std::cout<<"TODO: implement rasterization"<<std::endl;
+    // std::cout<<"TODO: implement rasterization"<<std::endl;
     
     int x_lo, x_up, y_lo, y_up; // upper and lower bounds for x and y, currently naive
 
@@ -99,9 +147,9 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 
     float Ax, Ay, Bx, By, Cx, Cy; // used for calculating vertex coordinates for baryocentric weights
     float alpha, beta, gamma; // baryocentric weight values, should add to 1
-    float depth;
-    data_fragment data_f;
-    data_output data_o;
+    float depth; // used in z buffering
+    data_fragment data_f; // used in the fragment shader
+    data_output data_o; // used in the fragment shader
     vec2 A, B, C; // A = {Ax, Ay}, and so on
     
     // implement bounding box
@@ -151,11 +199,13 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
                 }
               
                 else if (state.interp_rules[k] == interp_type::smooth) {
-                  float delta = (alpha / in[0] -> gl_Position[3]) + (beta / in[1] -> gl_Position[3]) + (gamma / in[2] -> gl_Position[3]);
+                  float delta = (alpha / in[0] -> gl_Position[3]) 
+                              + (beta  / in[1] -> gl_Position[3]) 
+                              + (gamma / in[2] -> gl_Position[3]);
                   
-                  data_f.data[k] = (alpha / in[0] -> gl_Position[3] / delta * in[0] -> gl_Position[3]) 
-                                 + (beta / in[1] -> gl_Position[3] / delta * in[1] -> gl_Position[3]) 
-                                 + (gamma / in[2] -> gl_Position[3] / delta * in[2] -> gl_Position[3]);
+                  data_f.data[k] = (alpha / in[0] -> gl_Position[3] / delta * in[0] -> data[k]) 
+                                 + (beta  / in[1] -> gl_Position[3] / delta * in[1] -> data[k]) 
+                                 + (gamma / in[2] -> gl_Position[3] / delta * in[2] -> data[k]);
                 }
               }
               
