@@ -146,12 +146,19 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
     y_up = state.image_height; // upper right corner represented by (width, height)
 
     float Ax, Ay, Bx, By, Cx, Cy; // used for calculating vertex coordinates for baryocentric weights
-    float alpha, beta, gamma; // baryocentric weight values, should add to 1
-    float depth; // used in z buffering
+    float alpha, beta, gamma, per_alpha, per_beta, per_gamma; // baryocentric weight values, should add to 1
+    float depth, w; // used in z buffering
     data_fragment data_f; // used in the fragment shader
     data_output data_o; // used in the fragment shader
     vec2 A, B, C; // A = {Ax, Ay}, and so on
-    
+
+    // if (in[0] -> gl_Position[0] <= in[0] -> gl_Position[3] && in[0] -> gl_Position[0] >= (-1 * in[0] -> gl_Position[3])) {
+    //     if (in[0] -> gl_Position[1] <= in[0] -> gl_Position[3] && in[0] -> gl_Position[1] >= (-1 * in[0] -> gl_Position[3])) {
+    //         if (in[1] -> gl_Position[0] <= in[1] -> gl_Position[3] && in[1] -> gl_Position[0] >= (-1 * in[1] -> gl_Position[3])) {
+    //             if (in[1] -> gl_Position[1] <= in[1] -> gl_Position[3] && in[1] -> gl_Position[1] >= (-1 * in[1] -> gl_Position[3])) {
+    //                 if (in[2] -> gl_Position[0] <= in[2] -> gl_Position[3] && in[2] -> gl_Position[0] >= (-1 * in[2] -> gl_Position[3])) {
+    //                     if (in[2] -> gl_Position[1] <= in[2] -> gl_Position[3] && in[2] -> gl_Position[1] >= (-1 * in[2] -> gl_Position[3])) {
+
     // implement bounding box
     Ax = 0.5 * (in[0] -> gl_Position[0] / in[0] -> gl_Position[3] + 1) * state.image_width - 0.5;
     Ay = 0.5 * (in[0] -> gl_Position[1] / in[0] -> gl_Position[3] + 1) * state.image_height - 0.5;
@@ -160,10 +167,10 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
     Cx = 0.5 * (in[2] -> gl_Position[0] / in[2] -> gl_Position[3] + 1) * state.image_width - 0.5;
     Cy = 0.5 * (in[2] -> gl_Position[1] / in[2] -> gl_Position[3] + 1) * state.image_height - 0.5;
     
-    x_lo = std::min(Ax, std::min(Bx, Cx));
-    y_lo = std::min(Ay, std::min(By, Cy));
-    x_up = std::max(Ax, std::max(Bx, Cx)) + 1;
-    y_up = std::max(Ay, std::max(By, Cy)) + 1;
+    x_lo = std::max(std::min(Ax, std::min(Bx, Cx)), 0.0f);
+    y_lo = std::max(std::min(Ay, std::min(By, Cy)), 0.0f);
+    x_up = std::min(std::max(Ax, std::max(Bx, Cx)), float(state.image_width)) + 1;
+    y_up = std::min(std::max(Ay, std::max(By, Cy)), float(state.image_height)) + 1;
         
     A = {Ax, Ay};
     B = {Bx, By};
@@ -187,36 +194,55 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
                    
             if (depth < state.image_depth[(j * state.image_width) + i]) {
             
-              data_f.data = new float[state.floats_per_vertex];
-              
-              for (int k = 0; k < state.floats_per_vertex; k++) {
-                if (state.interp_rules[k] == interp_type::flat) {
-                  data_f.data[k] = in[0] -> data[k];
+                data_f.data = new float[state.floats_per_vertex];
+                
+                for (int k = 0; k < state.floats_per_vertex; k++) {
+                    if (state.interp_rules[k] == interp_type::flat) {
+                        data_f.data[k] = in[0] -> data[k];
+                        w = alpha * in[0] -> gl_Position[3] + beta * in[1] -> gl_Position[3] + gamma * in[2] -> gl_Position[3];
+                    }
+                
+                    else if (state.interp_rules[k] == interp_type::noperspective) {
+                        data_f.data[k] = ((alpha * in[0] -> data[k]) + (beta * in[1] -> data[k]) + (gamma * in[2] -> data[k]));
+                        w = alpha * in[0] -> gl_Position[3] + beta * in[1] -> gl_Position[3] + gamma * in[2] -> gl_Position[3];
+                    }
+                
+                    else if (state.interp_rules[k] == interp_type::smooth) {
+                        float delta = (alpha / in[0] -> gl_Position[3]) 
+                                    + (beta  / in[1] -> gl_Position[3]) 
+                                    + (gamma / in[2] -> gl_Position[3]);
+
+                        per_alpha = alpha / in[0] -> gl_Position[3] / delta;
+                        per_beta = beta  / in[1] -> gl_Position[3] / delta;
+                        per_gamma = gamma / in[2] -> gl_Position[3] / delta;
+
+                        w = per_alpha * in[0] -> gl_Position[3] + per_beta * in[1] -> gl_Position[3] + per_gamma * in[2] -> gl_Position[3];
+                        
+                        data_f.data[k] = (alpha / in[0] -> gl_Position[3] / delta * in[0] -> data[k]) 
+                                        + (beta  / in[1] -> gl_Position[3] / delta * in[1] -> data[k]) 
+                                        + (gamma / in[2] -> gl_Position[3] / delta * in[2] -> data[k]);
+                    }
                 }
               
-                else if (state.interp_rules[k] == interp_type::noperspective) {
-                  data_f.data[k] = ((alpha * in[0] -> data[k]) + (beta * in[1] -> data[k]) + (gamma * in[2] -> data[k]));
+                // checking for whether youre inside the triangle and that the calculations hold true to the properties of barycentric weights
+                if (alpha >= 0 && beta >= 0 && gamma >= 0 && depth <= w && depth >= (-w)) { 
+                    state.fragment_shader(data_f, data_o, state.uniform_data);
+                    state.image_color[(j * state.image_width) + i] = make_pixel(255 * data_o.output_color[0], 255 * data_o.output_color[1], 255 * data_o.output_color[2]);
+                    state.image_depth[(j * state.image_width) + i] = depth;
                 }
-              
-                else if (state.interp_rules[k] == interp_type::smooth) {
-                  float delta = (alpha / in[0] -> gl_Position[3]) 
-                              + (beta  / in[1] -> gl_Position[3]) 
-                              + (gamma / in[2] -> gl_Position[3]);
-                  
-                  data_f.data[k] = (alpha / in[0] -> gl_Position[3] / delta * in[0] -> data[k]) 
-                                 + (beta  / in[1] -> gl_Position[3] / delta * in[1] -> data[k]) 
-                                 + (gamma / in[2] -> gl_Position[3] / delta * in[2] -> data[k]);
-                }
-              }
-              
-              // checking for whether youre inside the triangle and that the calculations hold true to the properties of barycentric weights
-              if (alpha >= 0 && beta >= 0 && gamma >= 0) { 
-                  state.fragment_shader(data_f, data_o, state.uniform_data);
-                  state.image_color[(j * state.image_width) + i] = make_pixel(255 * data_o.output_color[0], 255 * data_o.output_color[1], 255 * data_o.output_color[2]);
-                  state.image_depth[(j * state.image_width) + i] = depth;
-              }
             }
         }
     }
+
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
+    
+    
+   
 }
 
